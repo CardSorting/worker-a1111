@@ -1,8 +1,3 @@
-# Note:
-# Use Dockerfile.NetworkVolume only if you're going to store your models on Network Volume.
-# Use Dockerfile.NetworkVolume as-is, store your models in the /runpod-volume/models directory.
-# Use Dockerfile (default) if you want to add models to the image, instead of Network Volume.
-# 
 # ---------------------------------------------------------------------------- #
 #                         Stage 1: Download the models                         #
 # ---------------------------------------------------------------------------- #
@@ -25,7 +20,7 @@ RUN . /clone.sh BLIP https://github.com/salesforce/BLIP.git 48211a1594f1321b00f1
     . /clone.sh clip-interrogator https://github.com/pharmapsychotic/clip-interrogator 2486589f24165c8e3b303f84e9dbbea318df83e8
 
 # ---------------------------------------------------------------------------- #
-#                        Stage 3: Build the final image                        #
+#                        Stage 2: Build the final image                        #
 # ---------------------------------------------------------------------------- #
 FROM python:3.10.9-slim
 
@@ -76,6 +71,9 @@ RUN rm -rf /stable-diffusion-webui/models/Stable-diffusion && \
     ln -s /runpod-volume/models/ Stable-diffusion
 
 ADD src .
+
+# Add the function to upload files to Backblaze
+ADD handler.py .
 
 # Cleanup section (Worker Template)
 RUN apt-get autoremove -y && \
