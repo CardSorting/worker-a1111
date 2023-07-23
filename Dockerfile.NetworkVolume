@@ -73,7 +73,7 @@ RUN rm -rf /stable-diffusion-webui/models/Stable-diffusion && \
 ADD src .
 
 # Add the function to upload files to Backblaze
-ADD handler.py .
+ADD src/handler.py .
 
 # Cleanup section (Worker Template)
 RUN apt-get autoremove -y && \
