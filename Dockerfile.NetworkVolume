@@ -85,5 +85,8 @@ RUN apt-get autoremove -y && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
+# Copy start.sh into the Docker image and make it executable
+COPY src/start.sh /start.sh
 RUN chmod +x /start.sh
+
 CMD /start.sh
