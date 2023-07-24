@@ -75,7 +75,7 @@ RUN rm -rf /stable-diffusion-webui/models/Stable-diffusion && \
     ln -s /runpod-volume/models/ Stable-diffusion
 
 # Add the function to upload files to Backblaze and its dependencies
-COPY src/handler.py /handler.py
+COPY src/rp_handler.py /rp_handler.py
 COPY src/requirements_handler.txt /requirements_handler.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r /requirements_handler.txt
