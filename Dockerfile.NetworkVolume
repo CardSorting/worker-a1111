@@ -52,7 +52,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements_versions.txt
 
 COPY --from=download /repositories/ ${ROOT}/repositories/
-RUN mkdir ${ROOT}/interrogate && cp ${ROOT}/repositories/clip-interrogator/data/* ${ROOT}/interrogate
+RUN mkdir -p ${ROOT}/interrogate && \
+    if [ -d "${ROOT}/repositories/clip-interrogator/data" ]; then \
+    cp -r ${ROOT}/repositories/clip-interrogator/data/* ${ROOT}/interrogate; \
+    fi
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r ${ROOT}/repositories/CodeFormer/requirements.txt
 
@@ -82,5 +85,10 @@ RUN apt-get autoremove -y && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
+# Install the b2sdk Python module
+RUN pip install b2sdk
+
+# Ensure the start.sh script is executable
 RUN chmod +x /start.sh
+
 CMD /start.sh
