@@ -1,13 +1,9 @@
-# Note:
-# Use Dockerfile.NetworkVolume only if you're going to store your models on Network Volume.
-# Use Dockerfile.NetworkVolume as-is, store your models in the /runpod-volume/models directory.
-# Use Dockerfile (default) if you want to add models to the image, instead of Network Volume.
-# 
 # ---------------------------------------------------------------------------- #
 #                         Stage 1: Download the models                         #
 # ---------------------------------------------------------------------------- #
 FROM alpine/git:2.36.2 as download
 
+# Copy cloning script
 COPY builder/clone.sh /clone.sh
 
 # Clone the repos and clean unnecessary files
@@ -29,6 +25,7 @@ RUN . /clone.sh BLIP https://github.com/salesforce/BLIP.git 48211a1594f1321b00f1
 # ---------------------------------------------------------------------------- #
 FROM python:3.10.9-slim
 
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_PREFER_BINARY=1 \
     LD_PRELOAD=libtcmalloc.so \
@@ -38,27 +35,36 @@ ENV DEBIAN_FRONTEND=noninteractive \
     B2_APP_KEY="K005eKedENd+DOf1StTM0hsSMty8Q3g" \
     B2_BUCKET_NAME="11AABees"
 
+# Set shell options
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Install system dependencies
 RUN apt-get update && \
     apt install -y \
     fonts-dejavu-core rsync git jq moreutils aria2 wget libgoogle-perftools-dev procps && \
     apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && apt-get clean -y
 
+# Install PyTorch
 RUN --mount=type=cache,target=/cache --mount=type=cache,target=/root/.cache/pip \
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
+# Clone and install stable-diffusion-webui
 RUN --mount=type=cache,target=/root/.cache/pip \
     git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git && \
     cd stable-diffusion-webui && \
     git reset --hard 89f9faa63388756314e8a1d96cf86bf5e0663045 && \
     pip install -r requirements_versions.txt
 
+# Copy repositories from previous stage
 COPY --from=download /repositories/ ${ROOT}/repositories/
+
+# Copy clip-interrogator data
 RUN mkdir -p ${ROOT}/interrogate && \
     if [ -d "${ROOT}/repositories/clip-interrogator/data" ]; then \
     cp -r ${ROOT}/repositories/clip-interrogator/data/* ${ROOT}/interrogate; \
     fi
+
+# Install CodeFormer requirements
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r ${ROOT}/repositories/CodeFormer/requirements.txt
 
@@ -69,6 +75,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade -r /requirements.txt --no-cache-dir && \
     rm /requirements.txt
 
+# Reset and reinstall stable-diffusion-webui
 ARG SHA=89f9faa63388756314e8a1d96cf86bf5e0663045
 RUN --mount=type=cache,target=/root/.cache/pip \
     cd stable-diffusion-webui && \
@@ -76,11 +83,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     git reset --hard ${SHA} && \
     pip install -r requirements_versions.txt
 
-# NOTE: This expects the models to be stored in /runpod-volume/models folder on Network Volume
+# Symlink models directory
 RUN rm -rf /stable-diffusion-webui/models/Stable-diffusion && \
     cd /stable-diffusion-webui/models && \
     ln -s /runpod-volume/models/ Stable-diffusion
 
+# Copy source files
 ADD src .
 
 # Cleanup section (Worker Template)
@@ -94,4 +102,4 @@ RUN pip install b2sdk
 # Ensure the start.sh script is executable
 RUN chmod +x /start.sh
 
-CMD /start.sh
+CMD ["python", "/rp_handler.py"]
