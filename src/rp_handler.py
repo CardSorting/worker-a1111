@@ -64,8 +64,8 @@ def run_inference(params):
 #   Backblaze B2 Configuration and Interactions
 # -----------------------------------------------------------------------------
 def get_b2_bucket():
-    account_id = os.getenv('005b2784557c8a40000000001')
-    application_key = os.getenv('K005e9GQkwR8qYSN9NGv7Uw1u6FNhOE')
+    account_id = os.getenv('005b2784557c8a40000000002')
+    application_key = os.getenv('K005eKedENd+DOf1StTM0hsSMty8Q3g')
     bucket_name = '11AABees'
 
     info = InMemoryAccountInfo()
