@@ -1,73 +1,105 @@
-import os
-import logging
-import time
-import requests
-import runpod
-from b2sdk.v1 import InMemoryAccountInfo, B2Api, FileVersionInfo
-from requests.adapters import HTTPAdapter, Retry
+# ---------------------------------------------------------------------------- #
+#                         Stage 1: Download the models                         #
+# ---------------------------------------------------------------------------- #
+FROM alpine/git:2.36.2 as download
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Copy cloning script
+COPY builder/clone.sh /clone.sh
 
-class HTTPRequestHandler:
-    """Handles HTTP requests with automatic retries for intermittent network failures."""
-    def __init__(self):
-        self.session = requests.Session()
-        retries = Retry(total=10, backoff_factor=0.1, status_forcelist=[502, 503, 504])
-        self.session.mount('http://', HTTPAdapter(max_retries=retries))
+# Clone the repos and clean unnecessary files
+RUN . /clone.sh taming-transformers https://github.com/CompVis/taming-transformers.git 24268930bf1dce879235a7fddd0b2355b84d7ea6 && \
+    rm -rf data assets **/*.ipynb
 
-    def request(self, method, url, timeout=600, json=None):
-        """Performs the HTTP request and returns the response as JSON."""
-        response = self.session.request(method, url, timeout=timeout, json=json)
-        return response.json()
+RUN . /clone.sh stable-diffusion-stability-ai https://github.com/Stability-AI/stablediffusion.git 47b6b607fdd31875c9279cd2f4f16b92e4ea958e && \
+    rm -rf assets data/**/*.png data/**/*.jpg data/**/*.gif
 
-class B2Bucket:
-    """Provides a wrapper for interacting with a Backblaze B2 bucket."""
-    def __init__(self, account_id, application_key, bucket_name):
-        info = InMemoryAccountInfo()
-        self.b2_api = B2Api(info)
-        self.b2_api.authorize_account('production', account_id, application_key)
-        self.bucket = self.b2_api.get_bucket_by_name(bucket_name)
+RUN . /clone.sh CodeFormer https://github.com/sczhou/CodeFormer.git c5b4593074ba6214284d6acd5f1719b6c5d739af && \
+    rm -rf assets inputs
 
-    def upload_file(self, file_path, file_name=None):
-        """Uploads a file to the B2 bucket."""
-        file_name = file_name or os.path.basename(file_path)
-        with open(file_path, 'rb') as file:
-            try:
-                logger.info(f"Uploading {file_name} to Backblaze B2...")
-                file_info = self.bucket.upload_bytes(file.read(), file_name)
-                logger.info(f"Upload successful: {file_info.file_name}")
-                return file_info
-            except Exception as e:
-                logger.error(f"Failed to upload {file_name} to Backblaze B2: {e}")
-                return None
+RUN . /clone.sh BLIP https://github.com/salesforce/BLIP.git 48211a1594f1321b00f14c9f7a5b4813144b2fb9 && \
+    . /clone.sh k-diffusion https://github.com/crowsonkb/k-diffusion.git 5b3af030dd83e0297272d861c19477735d0317ec && \
+    . /clone.sh clip-interrogator https://github.com/pharmapsychotic/clip-interrogator 2486589f24165c8e3b303f84e9dbbea318df83e8
 
-def handler(event, api_config, request_handler, b2_bucket):
-    """Performs API inference and uploads the result to B2 bucket."""
-    api_name = event["input"]["api_name"]
-    api_verb, api_path = api_config["api"][api_name]
-    url = f"{api_config['baseurl']}{api_path}"
-    response = request_handler.request(api_verb, url, json=event["input"])
-    with open('response.txt', 'w') as file:
-        file.write(str(response))
-    file_info = b2_bucket.upload_file('response.txt')
-    if file_info is not None:
-        return [f"https://s3.us-east-005.backblazeb2.com/file/{b2_bucket.bucket.name}/{file_info.file_name}"]
+# ---------------------------------------------------------------------------- #
+#                        Stage 3: Build the final image                        #
+# ---------------------------------------------------------------------------- #
+FROM python:3.10.9-slim
 
-api_config = {
-    "baseurl": "http://127.0.0.1:3000",
-    "api": {
-        "txt2img":  ("POST", "/sdapi/v1/txt2img"),
-        "img2img":  ("POST", "/sdapi/v1/img2img"),
-        "getModels": ("GET", "/sdapi/v1/sd-models"),
-        "getOptions": ("GET", "/sdapi/v1/options"),
-        "setOptions": ("POST", "/sdapi/v1/options"),
-    },
-    "timeout": 600
-}
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_PREFER_BINARY=1 \
+    LD_PRELOAD=libtcmalloc.so \
+    ROOT=/stable-diffusion-webui \
+    PYTHONUNBUFFERED=1 \
+    B2_ACCOUNT_ID="005b2784557c8a40000000002" \
+    B2_APP_KEY="K005eKedENd+DOf1StTM0hsSMty8Q3g" \
+    B2_BUCKET_NAME="11AABees"
 
-request_handler = HTTPRequestHandler()
-b2_bucket = B2Bucket(os.getenv('B2_ACCOUNT_ID'), os.getenv('B2_APP_KEY'), os.getenv('B2_BUCKET_NAME'))
+# Set shell options
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-runpod.serverless.start({"handler": lambda event: handler(event, api_config, request_handler, b2_bucket)})
+# Install system dependencies
+RUN apt-get update && \
+    apt install -y \
+    fonts-dejavu-core rsync git jq moreutils aria2 wget libgoogle-perftools-dev procps && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && apt-get clean -y
+
+# Install PyTorch
+RUN --mount=type=cache,target=/cache --mount=type=cache,target=/root/.cache/pip \
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Clone and install stable-diffusion-webui
+RUN --mount=type=cache,target=/root/.cache/pip \
+    git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git && \
+    cd stable-diffusion-webui && \
+    git reset --hard 89f9faa63388756314e8a1d96cf86bf5e0663045 && \
+    pip install -r requirements_versions.txt
+
+# Copy repositories from previous stage
+COPY --from=download /repositories/ ${ROOT}/repositories/
+
+# Copy clip-interrogator data
+RUN mkdir -p ${ROOT}/interrogate && \
+    if [ -d "${ROOT}/repositories/clip-interrogator/data" ]; then \
+    cp -r ${ROOT}/repositories/clip-interrogator/data/* ${ROOT}/interrogate; \
+    fi
+
+# Install CodeFormer requirements
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r ${ROOT}/repositories/CodeFormer/requirements.txt
+
+# Install Python dependencies (Worker Template)
+COPY builder/requirements.txt /requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install --upgrade -r /requirements.txt --no-cache-dir && \
+    rm /requirements.txt
+
+# Reset and reinstall stable-diffusion-webui
+ARG SHA=89f9faa63388756314e8a1d96cf86bf5e0663045
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd stable-diffusion-webui && \
+    git fetch && \
+    git reset --hard ${SHA} && \
+    pip install -r requirements_versions.txt
+
+# Symlink models directory
+RUN rm -rf /stable-diffusion-webui/models/Stable-diffusion && \
+    cd /stable-diffusion-webui/models && \
+    ln -s /runpod-volume/models/ Stable-diffusion
+
+# Copy source files
+ADD src .
+
+# Cleanup section (Worker Template)
+RUN apt-get autoremove -y && \
+    apt-get clean -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install the b2sdk and runpod Python module
+RUN pip install b2sdk runpod
+
+# Ensure the start.sh script is executable
+RUN chmod +x /start.sh
+
+CMD ["python", "/rp_handler.py"]
