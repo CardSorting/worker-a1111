@@ -5,6 +5,7 @@ import requests
 from b2sdk.v1 import InMemoryAccountInfo, B2Api
 from requests.adapters import HTTPAdapter, Retry
 import runpod
+import uuid
 
 automatic_session = requests.Session()
 retries = Retry(total=10, backoff_factor=0.1, status_forcelist=[502, 503, 504])
@@ -106,20 +107,22 @@ def handler(event):
     # The base64 string is the first item in the 'images' list
     base64_string = response["images"][0]
 
+    # Generate a unique id for the filename
+    file_id = uuid.uuid4()
+
     # Decode base64 to image
-    base64_to_image(base64_string, 'output_image.png')
+    base64_to_image(base64_string, f'{file_id}.png')
 
     # Initialize B2 API
     b2_api = initialize_b2(os.getenv('B2_ACCOUNT_ID'), os.getenv('B2_APP_KEY'))
 
     # Upload the image to Backblaze B2
-    file_info = upload_to_b2(b2_api, os.getenv('B2_BUCKET_NAME'), 'output_image.png')
+    file_info = upload_to_b2(b2_api, os.getenv('B2_BUCKET_NAME'), f'{file_id}.png')
 
     # Return the URL of the uploaded file
     if file_info is not None:
         return [f"https://s3.us-east-005.backblazeb2.com/file/{os.getenv('B2_BUCKET_NAME')}/{file_info.file_name}"]
-
-
+        
 if __name__ == "__main__":
     wait_for_service(url='http://127.0.0.1:3000/sdapi/v1/txt2img')
 
