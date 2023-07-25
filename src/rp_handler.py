@@ -36,12 +36,12 @@ def run_inference(params, api_config):
     path = None
 
     if api_name in api_config["api"]:
-        api_config = api_config["api"][api_name]
+        api_method_config = api_config["api"][api_name]
     else:
         raise Exception("Method '%s' not yet implemented")
 
-    api_verb = api_config[0]
-    api_path = api_config[1]
+    api_verb = api_method_config[0]
+    api_path = api_method_config[1]
 
     response = {}
 
