@@ -93,6 +93,7 @@ def upload_to_b2(b2_api, bucket_name, file_path, file_name=None):
 # ---------------------------------------------------------------------------- #
 #                                RunPod Handler                                #
 # ---------------------------------------------------------------------------- #
+
 def handler(event):
     '''
     This is the handler function that will be called by the serverless.
@@ -121,7 +122,8 @@ def handler(event):
 
     # Return the URL of the uploaded file
     if file_info is not None:
-        return [f"https://s3.us-east-005.backblazeb2.com/file/{os.getenv('B2_BUCKET_NAME')}/{file_info.file_name}"]
+        return [f"https://s3.us-east-005.backblazeb2.com/file/{os.getenv('B2_BUCKET_NAME')}/{file_id}.png"]
+
         
 if __name__ == "__main__":
     wait_for_service(url='http://127.0.0.1:3000/sdapi/v1/txt2img')
