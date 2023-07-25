@@ -122,8 +122,7 @@ def handler(event):
 
     # Return the URL of the uploaded file
     if file_info is not None:
-        return [f"https://s3.us-east-005.backblazeb2.com/file/{os.getenv('B2_BUCKET_NAME')}/{file_id}.png"]
-
+        return [f"https://f005.backblazeb2.com/file/{os.getenv('B2_BUCKET_NAME')}/{file_id}.png"]
         
 if __name__ == "__main__":
     wait_for_service(url='http://127.0.0.1:3000/sdapi/v1/txt2img')
