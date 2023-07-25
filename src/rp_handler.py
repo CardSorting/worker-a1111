@@ -1,8 +1,7 @@
 import os
 import logging
-import time
 import requests
-from b2sdk.v1 import InMemoryAccountInfo, B2Api, FileVersionInfo
+from b2sdk.v1 import InMemoryAccountInfo, B2Api
 from requests.adapters import HTTPAdapter, Retry
 
 # Setup logging
@@ -21,19 +20,9 @@ class HTTPRequestHandler:
     def request(self, method, url, timeout=600, json=None):
         """
         Performs the HTTP request and returns the response as JSON.
-
-        Args:
-            method (str): HTTP method ('GET', 'POST', etc.)
-            url (str): The URL for the request.
-            timeout (int): The timeout for the request.
-            json (dict): The JSON body for 'POST' requests.
-
-        Returns:
-            dict: The response from the request.
         """
         response = self.session.request(method, url, timeout=timeout, json=json)
         return response.json()
-
 
 class B2Bucket:
     """
@@ -48,39 +37,16 @@ class B2Bucket:
     def upload_file(self, file_path, file_name=None):
         """
         Uploads a file to the B2 bucket.
-
-        Args:
-            file_path (str): The path to the file to upload.
-            file_name (str): The name to use for the file in the bucket.
-
-        Returns:
-            FileVersionInfo: The information about the uploaded file.
         """
         file_name = file_name or os.path.basename(file_path)
         with open(file_path, 'rb') as file:
-            try:
-                logger.info(f"Uploading {file_name} to Backblaze B2...")
-                file_info = self.bucket.upload_bytes(file.read(), file_name)
-                logger.info(f"Upload successful: {file_info.file_name}")
-                return file_info
-            except Exception as e:
-                logger.error(f"Failed to upload {file_name} to Backblaze B2: {e}")
-                return None
-
+            file_data = file.read()
+        file_info = self.bucket.upload_bytes(file_data, file_name)
+        return file_info
 
 def handler(event, api_config, request_handler, b2_bucket):
     """
     Handler function that performs API inference and uploads the result to B2 bucket.
-
-    Args:
-        event (dict): The event data passed into the handler. Expected to contain
-                      the key 'input' with the input data for the API.
-        api_config (dict): Configuration for the API.
-        request_handler (HTTPRequestHandler): The HTTP request handler.
-        b2_bucket (B2Bucket): The B2 bucket to upload files to.
-
-    Returns:
-        list: A list containing the URL of the uploaded file in the B2 bucket.
     """
     # Run inference using the API
     api_name = event["input"]["api_name"]
@@ -114,7 +80,7 @@ api_config = {
 
 # Initialize request handler and B2 bucket
 request_handler = HTTPRequestHandler()
-b2_bucket = B2Bucket(os.getenv('005b2784557c8a40000000002'), os.getenv('K005eKedENd+DOf1StTM0hsSMty8Q3g'), '11AABees')
+b2_bucket = B2Bucket(os.getenv('B2_ACCOUNT_ID'), os.getenv('B2_APP_KEY'), os.getenv('B2_BUCKET_NAME'))
 
 # Start the serverless service
 runpod.serverless.start({"handler": lambda event: handler(event, api_config, request_handler, b2_bucket)})
