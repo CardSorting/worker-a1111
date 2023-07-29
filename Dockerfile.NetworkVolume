@@ -30,9 +30,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_PRELOAD=libtcmalloc.so \
     ROOT=/stable-diffusion-webui \
     PYTHONUNBUFFERED=1 \
-    B2_ACCOUNT_ID="005b2784557c8a40000000002" \
-    B2_APP_KEY="K005eKedENd+DOf1StTM0hsSMty8Q3g" \
-    B2_BUCKET_NAME="11AABees"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
